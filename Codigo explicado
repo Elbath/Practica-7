@@ -1,0 +1,98 @@
+# ESP32 MPU6050 WebSocket Data Transmitter
+
+Este proyecto utiliza un ESP32 para transmitir datos de un sensor MPU6050 en tiempo real a través de un servidor WebSocket, permitiendo que clientes conectados reciban lecturas de aceleración y giroscopio en JSON.
+
+## Características
+
+- Configuración de punto de acceso en el ESP32.
+- Lectura de datos de aceleración y giroscopio del sensor MPU6050.
+- Transmisión de datos en formato JSON a través de WebSocket.
+- Actualización de datos a 10 Hz (ajustable).
+
+## Requisitos
+
+- **Hardware**:
+  - ESP32
+  - Sensor MPU6050
+- **Software**:
+  - Arduino IDE o PlatformIO
+  - Librerías para el ESP32, MPU6050 y WebSocket:
+    - `WiFi.h` (incluida con el ESP32)
+    - `Wire.h`
+    - `MPU6050.h`
+    - `WebSocketsServer.h`
+
+## Configuración
+
+1. Clona este repositorio:
+   ```bash
+   git clone https://github.com/tu-usuario/ESP32_MPU6050_WebSocket.git
+
+#include <WiFi.h>
+#include <Wire.h>
+#include <MPU6050.h>
+#include <WebSocketsServer.h>
+
+// Configuración del punto de acceso
+const char *ssid = "ESP32-AP";
+const char *password = "12345678";
+
+// Instancia del sensor MPU6050 y servidor WebSocket
+MPU6050 mpu;
+WebSocketsServer webSocket = WebSocketsServer(80);
+
+void setup() {
+  Serial.begin(115200);
+
+  // Inicializa el MPU6050
+  Wire.begin();
+  mpu.initialize();
+  if (!mpu.testConnection()) {
+    Serial.println("Error al conectar con el MPU6050");
+    while (1);
+  }
+
+  // Configura el ESP32 como punto de acceso
+  WiFi.softAP(ssid, password);
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("Dirección IP del AP: ");
+  Serial.println(IP);
+
+  // Inicia el servidor WebSocket
+  webSocket.begin();
+  webSocket.onEvent(webSocketEvent);
+}
+
+void loop() {
+  // Llama al servidor WebSocket
+  webSocket.loop();
+
+  // Obtiene los datos del giroscopio y acelerómetro
+  int16_t ax, ay, az, gx, gy, gz;
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+
+  // Formatea los datos en JSON
+  String json = "{";
+  json += "\"ax\":" + String(ax) + ",";
+  json += "\"ay\":" + String(ay) + ",";
+  json += "\"az\":" + String(az) + ",";
+  json += "\"gx\":" + String(gx) + ",";
+  json += "\"gy\":" + String(gy) + ",";
+  json += "\"gz\":" + String(gz);
+  json += "}";
+
+  // Envía los datos a todos los clientes conectados
+  webSocket.broadcastTXT(json);
+
+  // Espera un corto tiempo antes de la siguiente lectura
+  delay(100);  // Puedes ajustar el tiempo de actualización
+}
+
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
+  if (type == WStype_CONNECTED) {
+    Serial.println("Cliente conectado");
+  } else if (type == WStype_DISCONNECTED) {
+    Serial.println("Cliente desconectado");
+  }
+}
+
